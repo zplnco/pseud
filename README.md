@@ -14,5 +14,5 @@ Notes:
      > Now write the partition table (w)
      > Reboot (shutdown -r now).
      > sudo resize2fs /dev/sda2
-2. Installed needed python3 libraries: ($ pip3 install selenium bs4)
+2. Installed needed python3 libraries: ($ pip3 install selenium bs4 chromedriver)
 3. Identify path to chromedriver (install if necessary: https://www.raspberrypi.org/forums/viewtopic.php?t=194176)
