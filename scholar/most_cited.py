@@ -1,93 +1,85 @@
-import requests as req
-from bs4 import BeautifulSoup as soup
-from scraper_api import ScraperAPIClient
 from concurrent.futures import ThreadPoolExecutor
+from scraper_api import ScraperAPIClient
+import requests as req
+from bs4 import BeautifulSoup
 
-keyword = "psychology"
-since = 2010 # start year
-pages = 2 # pages searching through
-top_x = 3 # top __ pages you wish to see
+class GoogleScholarBot:
 
-class Google_Scholar_Bot:
+    def __init__(self, url_list, threads, top_x):
 
-	def __init__(self, keyword, start_year, total_pages, top_x):
-		self.keyword = keyword
-		self.since = start_year
-		self.pages = total_pages
-		self.top_x = top_x
+        self.urls = url_list
+        self.results = []
+        self.threads = threads
+        self.top_x = top_x
+        # making counting variables self-variables, so they can be accessed from multiple threads
+        self.count_v_a = [] 
+        self.a_count = [] 
+        self.p_count = []
+       
+    def make_request(self, url):
+        try:
+            client = ScraperAPIClient('bb129ca384c265942abc9af857eb1471') # making request throuhg Scraper API
+            r = client.get(url=url, timeout=60) 
+        except Exception as e:
+            print(e)
+        return r.content
 
-	def Get_Article_Data(self, page, keyword, since):
-		
-		url = "https://scholar.google.com/scholar?start={}&q={}&hl=en&as_sdt=0,33&as_ylo={}&as_yhi=2020".format(str(page), self.keyword, str(self.since))
+    def parse_results(self, html):
+        try:
+            soup = BeautifulSoup(html, 'lxml')
+            for article in soup.select('[data-rp]'): # initializing socket connection
+                try:
+                    title = article.select('h3')[0].text
+                    if 'BOOK' in title.split()[0] or 'CITATION' in title.split()[0]: # making sure article is valid
+                        continue
+                    else:
+                        self.count_v_a += 1 # everytime a sufficient article is found
 
-		client = ScraperAPIClient('bb129ca384c265942abc9af857eb1471')
-		response = client.get(url, timeout=60) 
-		resp_parsed = soup(response.content,'lxml')
+                        print('\n--- retrieving article data ---\n')
 
-		if "Our systems have detected unusual traffic from your computer network." in resp_parsed.text: # checking for IP block
-			return '! IP Blocked !'
-		elif resp_parsed.status_code == 403:
-			return'! exceeded avaliable API calls !'
-		elif resp_parsed.status_code == 429:
-			return '! exceeded concurrent-connections limit !' # slow down request rate
-		elif resp_parsed.status_code == 500:
-			return '! request failed !'
-		else:
-			pass
+                        cites_sloppy = [a.contents for a in article.select('a') if 'cites' in a.get('href')]
+                        cites = int(cites_sloppy[0][0].split()[-1]) # only grabbing the # of cites
+                        link = article.select('a')[0].get('href')
 
-		return resp_parsed
+                        if self.count_v_a <= self.top_x: # after we have our top 10, the point of reference will be the lowest # of citations in the list
+                            self.results.append([title, cites, link])
+                            self.results.sort(key=lambda e: e[1], reverse=True) # sorting by # of citations
+                        else:
+                            if cites > self.results[-1][1]:
+                                self.results[-1][1] = cites
+                                self.results.sort(key=lambda e: e[1], reverse=True) # sorting by # of citations
+                                print('\n--- constructing top {} most cited articles\n'.format(str(self.top_x)))
+                                continue
+                            else:
+                                continue        
+            
+                except Exception as e: 
+                    pass
+        except Exception as e:
+            print(e)
 
-
-	def Analyze_Data(self, keyword, since, top_x):
-
-		pages_f = [n*10 for n in range(pages)] # formatting articles by every 10
-		articles = [] 
-		count = 0 # counting first 10 sufficient articles
-
-		for page in pages_f:
-			for article in self.Get_Article_Data(page, self.keyword, self.since).select('[data-rp]'): # initializing socket connection
-				try:
-					title = article.select('h3')[0].text
-					if 'BOOK' in title.split()[0] or 'CITATION' in title.split()[0]:
-						continue
-					else:
-						count += 1
-						print('\n--- retrieving article data ---\n')
-
-						cites_sloppy = [a.contents for a in article.select('a') if 'cites' in a.get('href')]
-						cites = int(cites_sloppy[0][0].split()[-1]) # only grabbing the # of cites
-						link = article.select('a')[0].get('href')
-						
-						if count <= self.top_x: # after we have our top 10, the point of reference will be the lowest # of citations in the list
-							articles.append([title, cites, link, int(page/10)+1])
-							articles.sort(key=lambda e: e[1], reverse=True) # sorting by # of citations
-						else:
-							if cites > articles[-1][1]:
-								articles[-1][1] = cites
-								articles.sort(key=lambda e: e[1], reverse=True) # sorting by # of citations
-								print('\n--- constructing top {} most cited articles\n'.format(str(self.top_x)))
-								continue
-							else:
-								continue		
-
-				except Exception as e: 
-					pass
-
-		return articles
-
-	def Output(self, keyword, since, pages):
-		
-		articles = self.Analyze_Data(self.keyword, self.since, self.top_x)
-		print("\n\n Keyword: {}\t\tSince: {}\t\tArticles Analyzed: {}\n\n".format(self.keyword, str(self.since), str(self.pages*10)))
-		for a in articles:
-			print("\n TITLE: {}\n\n CITES: {}\n\n URL: {}\n\n PAGE: {}".format(a[0], a[1], a[2], a[3]), end='\n-----------------------------------------\n')
-
-	# def run_script(self):
- #        with ThreadPoolExecutor(max_workers=min(len(self.urls),self.max_threads)) as Executor:
- #            jobs = [Executor.submit(self.wrapper, u) for u in self.urls]
+    def wrapper(self, url):
+        html = self.make_request(url)
+        self.parse_results(html)
+ 
+    def run_script(self):
+        self.count_v_a = 0 # counting valid article
+        with ThreadPoolExecutor(max_workers=self.threads) as Executor:
+            execute = [Executor.submit(self.wrapper, u) for u in self.urls]
 
 
-if __name__ == "__main__":
-	gs_bot = Google_Scholar_Bot(keyword, since, pages, top_x)
-	run = gs_bot.Output(keyword, since, pages)
-	
+if __name__ == '__main__':
+
+    keyword = "psychology"
+    since = 2010 # start year
+    pages = 200 # pages searching through
+    threads = 5 # max for free trial
+    top_x = 10 # top __ results you wish to return
+
+    pages_f = [n*10 for n in range(pages)] # formatting articles by every 10
+    urls  = ["https://scholar.google.com/scholar?start={}&q={}&hl=en&as_sdt=0,33&as_ylo={}&as_yhi=2020".format(str(page), keyword, str(since)) for page in pages_f]
+    gs_bot = GoogleScholarBot(urls, threads, top_x)
+    gs_bot.run_script()
+    print("\n\n Keyword: {}\t\tSince: {}\t\tArticles Analyzed: {}\n\n".format(keyword, str(since), str(pages*10)))
+    for a in gs_bot.results:
+        print("\n TITLE: {}\n\n CITES: {}\n\n URL: {}".format(a[0], a[1], a[2]), end='\n\n-----------------------------------------\n')
