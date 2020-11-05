@@ -2,6 +2,44 @@ from concurrent.futures import ThreadPoolExecutor
 from scraper_api import ScraperAPIClient
 import requests as req
 from bs4 import BeautifulSoup
+import argparse
+
+parser = argparse.ArgumentParser(description='Analyze Google Scholar by Keyword')
+parser.add_argument(
+    '--keyword',
+    type=str,
+    help='keyword to search against'
+    )
+parser.add_argument(
+    '--start',
+    type=str,
+    default="2010",
+    help='start year in format "YYYY", default "2010"'
+    )
+parser.add_argument(
+    '--pages',
+    type=int,
+    default=200,
+    help='number of pages to search, default "200'
+    )
+parser.add_argument(
+    '--top',
+    type=int,
+    default=10,
+    help='number of results to return, default "10"'
+    )
+parser.add_argument(
+    '--threads',
+    type=int,
+    default=5,
+    help='number of threads to run, default "5"'
+    )
+args = parser.parse_args()
+keyword = args.keyword
+since = args.start
+pages = args.pages
+top_x = args.top
+threads = args.threads
 
 class GoogleScholarBot:
 
@@ -70,11 +108,11 @@ class GoogleScholarBot:
 
 if __name__ == '__main__':
 
-    keyword = "psychology"
-    since = 2010 # start year
-    pages = 200 # pages searching through
-    threads = 5 # max for free trial
-    top_x = 10 # top __ results you wish to return
+    # keyword = "psychology"
+    # since = 2010 # start year
+    # pages = 200 # pages searching through
+    # threads = 5 # max for free trial
+    # top_x = 10 # top __ results you wish to return
 
     pages_f = [n*10 for n in range(pages)] # formatting articles by every 10
     urls  = ["https://scholar.google.com/scholar?start={}&q={}&hl=en&as_sdt=0,33&as_ylo={}&as_yhi=2020".format(str(page), keyword, str(since)) for page in pages_f]
